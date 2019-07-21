@@ -9,10 +9,12 @@ import os
 import shutil
 import sys
 
+import keras.backend as K
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import tensorflow as tf
 
 from imutils import paths
 from keras.callbacks import (EarlyStopping, LearningRateScheduler,
@@ -229,11 +231,18 @@ TEST_DATA = TEST_DATA_GENERATOR.flow_from_dataframe(dataframe=TEST,
                                                     batch_size=BATCH_SIZE,
                                                     shuffle=False)
 
+# Cohen Kappa metrics
+
+
+def cohen_kappa(y_true, y_pred):
+    y_true_classes = tf.argmax(y_true, 1)
+    y_pred_classes = tf.argmax(y_pred, 1)
+    return tf.contrib.metrics.cohen_kappa(y_true_classes, y_pred_classes, CLASSES)[1]
+
 
 ###################################################################################################
 # Compile MetaMorph model
 ###################################################################################################
-
 print("[INFO] Compiling model....")
 Models = Models(height=HEIGHT, width=WIDTH, depth=DEPTH, classes=CLASSES)
 
@@ -246,7 +255,9 @@ else:
 
 OPTIMISER = SGD(lr=LEARNING_RATE, momentum=MOMENTUM)
 
-MODEL.compile(loss=LOSS, optimizer=OPTIMISER, metrics=METRICS)
+MODEL.compile(loss=LOSS, optimizer=OPTIMISER, metrics=[*METRICS, cohen_kappa])
+
+K.get_session().run(tf.local_variables_initializer())
 
 print(80*"#")
 print("\n")
