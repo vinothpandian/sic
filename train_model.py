@@ -166,7 +166,6 @@ TRAIN, VALIDATION = train_test_split(
 
 NUM_OF_TRAINING_SAMPLES = 64  # len(TRAIN)
 NUM_OF_VALIDATION_SAMPLES = 64  # len(VALIDATION)
-NUM_OF_TEST_SAMPLES = len(TEST)
 CLASSES = len(DATASET["Drscore"].unique())
 
 
@@ -253,8 +252,10 @@ else:
         MODEL = Models.resnet50()
     elif MODEL_NAME == "inception":
         MODEL = Models.inception()
+    elif MODEL_NAME == "vgg":
+        MODEL = Models.vgg()
     else:
-        MODEL = Models.resnet50()
+        MODEL = Models.vgg()
 
 OPTIMISER = SGD(lr=LEARNING_RATE, momentum=MOMENTUM)
 
@@ -325,6 +326,8 @@ HISTORY = MODEL.fit_generator(generator=TRAINING_DATA,
                               steps_per_epoch=NUM_OF_TRAINING_SAMPLES//BATCH_SIZE,
                               epochs=EPOCHS,
                               callbacks=CALLBACKS,
+                              workers=8,
+                              use_multiprocessing=True,
                               validation_data=VALIDATION_DATA,
                               validation_steps=NUM_OF_VALIDATION_SAMPLES//BATCH_SIZE,
                               verbose=VERBOSITY)
@@ -346,7 +349,9 @@ MODEL.save_weights(os.path.join(OUTPUT_FOLDER, "trained_weights.hdf5"))
 print("[INFO] Evaluating the model....")
 # Predict only on existing images - len(TEST_DATA.classes)
 PREDICTIONS = MODEL.predict_generator(generator=TEST_DATA,
-                                      steps=NUM_OF_TEST_SAMPLES)
+                                      workers=8,
+                                      use_multiprocessing=True,
+                                      verbose=VERBOSITY)
 Y_PREDICTIONS = np.argmax(PREDICTIONS, axis=1)
 
 CONFUSION_MATRIX_FILENAME = os.path.join(OUTPUT_FOLDER, "confusion_matrix")
@@ -354,7 +359,7 @@ CONFUSION_MATRIX_FILENAME = os.path.join(OUTPUT_FOLDER, "confusion_matrix")
 confusion_matrix_analysis(y_true=TEST_DATA.classes,
                           y_predicted=Y_PREDICTIONS,
                           filename=CONFUSION_MATRIX_FILENAME,
-                          labels=np.arange(CLASSES))
+                          labels=[0, 1, 2, 3, 4])
 
 CLASSIFICATION_REPORT = classification_report(TEST_DATA.classes,
                                               Y_PREDICTIONS)
