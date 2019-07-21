@@ -20,6 +20,7 @@
 *.jpg
 *.tif
 *.jpeg
+*.zip
 
 # IDE
 .vscode

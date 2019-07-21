@@ -1,31 +1,36 @@
 """
 Train Metamorph neural network
 """
-from nn.metamorph import MetaMorph
-from utils.validate_config import validate
-from utils.preprocessing import (preprocessing_function,
-                                 process_sample)
-from utils.plot_confusion_matrix import confusion_matrix_analysis
-from callbacks.trainingmonitor import TrainingMonitor
-from sklearn.preprocessing import LabelBinarizer
-from sklearn.metrics import classification_report, confusion_matrix
-from prettytable import PrettyTable
-from keras.preprocessing.image import ImageDataGenerator
-from keras.optimizers import SGD
-from keras.models import load_model
-from keras.callbacks import (EarlyStopping, LearningRateScheduler,
-                             ModelCheckpoint, TensorBoard)
-from imutils import paths
-import numpy as np
-import matplotlib.pyplot as plt
 import argparse
+import configparser
 import datetime
 import json
 import os
-import sys
 import shutil
+import sys
 
 import matplotlib
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+
+from imutils import paths
+from keras.callbacks import (EarlyStopping, LearningRateScheduler,
+                             ModelCheckpoint, TensorBoard)
+from keras.models import load_model
+from keras.optimizers import SGD
+from keras.preprocessing.image import ImageDataGenerator
+from sklearn.metrics import classification_report, confusion_matrix
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import LabelBinarizer
+
+from callbacks.trainingmonitor import TrainingMonitor
+from nn.models import Models
+from prettytable import PrettyTable
+from utils.plot_confusion_matrix import confusion_matrix_analysis
+from utils.preprocessing import preprocessing_function, process_sample
+from utils.validate_config import validate
+
 matplotlib.use("Agg")
 
 
@@ -38,49 +43,44 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 PARSER = argparse.ArgumentParser()
 PARSER.add_argument("-c", "--config_file", type=str, required=True,
-                    help="MetaMorph configuration file path")
+                    help="Configuration file path")
 PARSER.add_argument("-e", "--epochs", type=int, default=None,
-                    help="MetaMorph configuration file path")
+                    help="Epochs")
 
 
 ARGS = vars(PARSER.parse_args())
 
 CONFIG_FILE = ARGS["config_file"]
+CONFIG = configparser.ConfigParser()
+CONFIG.read(CONFIG_FILE)
 
-# Exit if error in config file
-if not validate(CONFIG_FILE):
-    print("Erroneous configuration file. Please recheck")
-    sys.exit(0)
 
-###################################################################################################
+# Set verbosity
+NAME = CONFIG["model"]["name"]
+VERBOSITY = CONFIG["model"]["verbosity"]
 
-# Load config file
-with open(CONFIG_FILE, "r") as json_file:
-    JSON_DATA = json_file.read()
-
-CONFIG = json.loads(JSON_DATA)
-
-# Training mode - Backend or classifier
-TRAINING_MODE = CONFIG["training mode"]
-
-PRETRAINED_MODEL = CONFIG["pre-trained model"]
+# Set model configuration
+PRETRAINED_MODEL = CONFIG["model"]["pretrained_model"]
+LOSS = CONFIG["model"]["loss"]
+METRICS = CONFIG["model"]["metrics"].split(",")
 
 # Dataset folder information
-DATASET_INFORMATION = CONFIG["dataset information"]
+DATASET_INFORMATION = CONFIG["dataset_information"]
 
-TRAIN_FOLDER = DATASET_INFORMATION["train folder"]
-DEV_FOLDER = DATASET_INFORMATION["dev folder"]
-TEST_FOLDER = DATASET_INFORMATION["test folder"]
-SAMPLE_FOLDER = DATASET_INFORMATION["samples folder"]
-LABELS_FILE = DATASET_INFORMATION["labels file"]
+TRAINING_CSV = DATASET_INFORMATION["training_csv"]
+DATASET_FOLDER = DATASET_INFORMATION["dataset_folder"]
 
-CURRENT_TIMESTAMP = datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
+# Disabled sample temporarily -
+# add later for enhancements in featurewise center
+# SAMPLE_FOLDER = DATASET_INFORMATION["samples folder"]
+
+CURRENT_TIMESTAMP = datetime.datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
 PID = os.getpid()
 
-OUTPUT_FOLDERNAME = f'{TRAINING_MODE.capitalize()}-{CURRENT_TIMESTAMP}-{PID}'
+OUTPUT_FOLDERNAME = f'{NAME}__{CURRENT_TIMESTAMP}__{PID}'
 
 OUTPUT_FOLDER = os.path.join(
-    DATASET_INFORMATION["output folder"], OUTPUT_FOLDERNAME)
+    DATASET_INFORMATION["output_folder"], OUTPUT_FOLDERNAME)
 WEIGHTS_FOLDER = os.path.join(OUTPUT_FOLDER, "weights")
 LOGS_FOLDER = os.path.join(OUTPUT_FOLDER, "logs")
 
@@ -91,14 +91,14 @@ os.makedirs(LOGS_FOLDER, exist_ok=True)
 
 
 # Image augmentation parameters
-IMAGE_AUGMENTATION = CONFIG["image augmentation"]
+IMAGE_AUGMENTATION = CONFIG["image_augmentation"]
 
-WIDTH = IMAGE_AUGMENTATION["size"]
-HEIGHT = IMAGE_AUGMENTATION["size"]
+HEIGHT = IMAGE_AUGMENTATION["height"]
+WIDTH = IMAGE_AUGMENTATION["width"]
 DEPTH = IMAGE_AUGMENTATION["depth"]
 SHIFT = IMAGE_AUGMENTATION["shift"]
 ROTATION = IMAGE_AUGMENTATION["rotation"]
-VAL_AUG_FACTOR = IMAGE_AUGMENTATION["validation data augmentation factor"]
+VAL_AUG_FACTOR = IMAGE_AUGMENTATION["validation_data_augmentation_factor"]
 
 # Hyperparameters
 HYPERPARAMETERS = CONFIG["hyperparameters"]
@@ -106,23 +106,17 @@ HYPERPARAMETERS = CONFIG["hyperparameters"]
 # Set epochs from args if set else from config file
 EPOCHS = ARGS["epochs"] if ARGS["epochs"] else HYPERPARAMETERS["epochs"]
 
-BATCH_SIZE = HYPERPARAMETERS["batch size"]
-LEARNING_RATE = HYPERPARAMETERS["learning rate"]
-DROP_EVERY = HYPERPARAMETERS["learning rate decay after x epoch"]
-DROP_FACTOR = HYPERPARAMETERS["decay rate"]
+BATCH_SIZE = HYPERPARAMETERS["batch_size"]
+LEARNING_RATE = HYPERPARAMETERS["learning_rate"]
+DROP_EVERY = HYPERPARAMETERS["learning_rate_decay_after_x_epoch"]
+DROP_FACTOR = HYPERPARAMETERS["decay_rate"]
 MOMENTUM = HYPERPARAMETERS["momentum"]
 
 # Image generator information
-IMAGE_GENERATOR_INFORMATION = CONFIG["image generator information"]
+TRAIN_TEST_VAL_SPLIT = CONFIG["train_test_val_split"]
 
-NUM_OF_TRAINING_SAMPLES = IMAGE_GENERATOR_INFORMATION["num of training samples"]
-NUM_OF_TEST_SAMPLES = IMAGE_GENERATOR_INFORMATION["num of test samples"]
-
-# Set verbosity
-VERBOSITY = CONFIG["verbosity"]
-
-LOSS = "categorical_crossentropy"
-METRICS = ["accuracy"]
+TEST_SPLIT = TRAIN_TEST_VAL_SPLIT["test_split"]
+VALIDATION_SPLIT = TRAIN_TEST_VAL_SPLIT["validation_split"]
 
 
 ###################################################################################################
@@ -130,7 +124,7 @@ METRICS = ["accuracy"]
 ###################################################################################################
 
 print(80*"#")
-print(f'MetaMorph training - {TRAINING_MODE.capitalize()} mode'.center(80))
+print(f'Training - with {NAME} config file'.center(80))
 print(CURRENT_TIMESTAMP.center(80))
 print(f'Training results stored in {OUTPUT_FOLDERNAME}'.center(80))
 print(80*"#")
@@ -138,8 +132,6 @@ print(80*"#")
 PRETTY = PrettyTable()
 PRETTY.field_names = ["Purpose", "Parameter", "Values"]
 PRETTY.align = "l"
-
-PRETTY.add_row(["Training Mode", "", TRAINING_MODE.capitalize()])
 PRETTY.add_row(["", "", ""])
 PRETTY.add_row(["Image Augmentation", "Shift", SHIFT])
 PRETTY.add_row(["Image Augmentation", "Rotation", ROTATION])
@@ -159,64 +151,72 @@ print(DETAILS)
 
 
 ###################################################################################################
-# Read labels from file and create Label binarizer
+# Read details from CSV
 ###################################################################################################
 
-with open(LABELS_FILE, "r") as lf:
-    LABELS = np.array([x[:-1] for x in lf.readlines()])
+DATASET = pd.read_csv(TRAINING_CSV, dtype=str)
+TRAIN_VALIDATION, TEST = train_test_split(DATASET, test_size=TEST_SPLIT)
+TRAIN, VALIDATION = train_test_split(
+    TRAIN_VALIDATION, test_size=VALIDATION_SPLIT)
 
-CLASSES = len(LABELS)
-
-LB = LabelBinarizer().fit(LABELS)
+CLASSES = len(DATASET["Drscore"].unique())
 
 
 ###################################################################################################
 #  Create data generator to augment images for training and validation
 ###################################################################################################
 
-TRAINING_DATA_GENERATOR = ImageDataGenerator(featurewise_center=True, rotation_range=ROTATION,
+TRAINING_DATA_GENERATOR = ImageDataGenerator(rotation_range=ROTATION,
                                              width_shift_range=SHIFT, height_shift_range=SHIFT,
-                                             preprocessing_function=preprocessing_function)
+                                             rescale=1./255)
 
 
-VALIDATION_DATA_GENERATOR = ImageDataGenerator(featurewise_center=True,
-                                               rotation_range=ROTATION *
+VALIDATION_DATA_GENERATOR = ImageDataGenerator(rotation_range=ROTATION *
                                                (1+VAL_AUG_FACTOR),
                                                width_shift_range=SHIFT *
                                                (1+VAL_AUG_FACTOR),
                                                height_shift_range=SHIFT *
                                                (1+VAL_AUG_FACTOR),
-                                               preprocessing_function=preprocessing_function)
+                                               rescale=1./255)
 
-TEST_DATA_GENERATOR = ImageDataGenerator(
-    preprocessing_function=preprocessing_function)
+TEST_DATA_GENERATOR = ImageDataGenerator(rescale=1./255)
 
 # Load sample images to fit image generator for identifying featurewise center
-SAMPLES = [process_sample(image_path, depth=DEPTH)
-           for image_path in paths.list_images(SAMPLE_FOLDER)]
-
-TRAINING_DATA_GENERATOR.fit(SAMPLES)
-VALIDATION_DATA_GENERATOR.fit(SAMPLES)
+# SAMPLES = [process_sample(image_path, depth=DEPTH)
+#            for image_path in paths.list_images(SAMPLE_FOLDER)]
+# TRAINING_DATA_GENERATOR.fit(SAMPLES)
+# VALIDATION_DATA_GENERATOR.fit(SAMPLES)
 
 COLOR_MODE = "grayscale" if DEPTH == 1 else "rgb"
 
 print("[INFO] Creating training data generator")
-TRAINING_DATA = TRAINING_DATA_GENERATOR.flow_from_directory(directory=TRAIN_FOLDER,
+TRAINING_DATA = TRAINING_DATA_GENERATOR.flow_from_dataframe(dataframe=TRAIN,
+                                                            directory=DATASET_FOLDER,
+                                                            x_col="Filename",
+                                                            y_col="Drscore",
+                                                            class_mode="categorical",
                                                             color_mode=COLOR_MODE,
                                                             target_size=(
                                                                 WIDTH, HEIGHT),
                                                             batch_size=BATCH_SIZE)
 
 print("[INFO] Creating validation data generator")
-VALIDATION_DATA = VALIDATION_DATA_GENERATOR.flow_from_directory(directory=DEV_FOLDER,
+VALIDATION_DATA = VALIDATION_DATA_GENERATOR.flow_from_dataframe(dataframe=VALIDATION,
+                                                                directory=DATASET_FOLDER,
+                                                                x_col="Filename",
+                                                                y_col="Drscore",
+                                                                class_mode="categorical",
                                                                 color_mode=COLOR_MODE,
                                                                 target_size=(
                                                                     WIDTH, HEIGHT),
                                                                 batch_size=BATCH_SIZE)
 
 print("[INFO] Creating test data generator")
-TEST_DATA = TEST_DATA_GENERATOR.flow_from_directory(directory=TEST_FOLDER,
-                                                    color_mode=COLOR_MODE,
+TEST_DATA = TEST_DATA_GENERATOR.flow_from_dataframe(dataframe=TEST,
+                                                    directory=DATASET_FOLDER,
+                                                    x_col="Filename",
+                                                    y_col="Drscore",
+                                                    class_mode="categorical",
                                                     target_size=(
                                                         WIDTH, HEIGHT),
                                                     batch_size=BATCH_SIZE,
@@ -228,24 +228,13 @@ TEST_DATA = TEST_DATA_GENERATOR.flow_from_directory(directory=TEST_FOLDER,
 ###################################################################################################
 
 print("[INFO] Compiling model....")
-METAMORPH = MetaMorph()
+Models = Models(height=HEIGHT, width=WIDTH, depth=DEPTH, classes=CLASSES)
 
 if PRETRAINED_MODEL != "":
     print("[INFO] Loading pre-trained model")
     MODEL = load_model(PRETRAINED_MODEL)
 else:
-    if TRAINING_MODE == "backend":
-        print("[INFO] Backend training mode")
-        MODEL = METAMORPH.backend(width=WIDTH,
-                                  height=HEIGHT,
-                                  depth=DEPTH,
-                                  classes=CLASSES)
-    else:
-        print("[INFO] Classifier training mode")
-        MODEL = METAMORPH.classifier(width=WIDTH,
-                                     height=HEIGHT,
-                                     depth=DEPTH,
-                                     classes=CLASSES)
+    MODEL = Models.resnet50()
 
 
 OPTIMISER = SGD(lr=LEARNING_RATE, momentum=MOMENTUM)
