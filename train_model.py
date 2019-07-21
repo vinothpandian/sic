@@ -28,7 +28,6 @@ from callbacks.trainingmonitor import TrainingMonitor
 from nn.models import Models
 from prettytable import PrettyTable
 from utils.plot_confusion_matrix import confusion_matrix_analysis
-from utils.preprocessing import preprocessing_function, process_sample
 from utils.validate_config import validate
 
 matplotlib.use("Agg")
@@ -56,11 +55,11 @@ CONFIG.read(CONFIG_FILE)
 
 
 # Set verbosity
-NAME = CONFIG["model"]["name"]
-VERBOSITY = CONFIG["model"]["verbosity"]
+NAME = CONFIG["general"]["name"]
+VERBOSITY = int(CONFIG["general"]["verbosity"])
 
 # Set model configuration
-PRETRAINED_MODEL = CONFIG["model"]["pretrained_model"]
+PRETRAINED_MODEL_PATH = CONFIG["model"]["pretrained_model_path"]
 LOSS = CONFIG["model"]["loss"]
 METRICS = CONFIG["model"]["metrics"].split(",")
 
@@ -93,30 +92,31 @@ os.makedirs(LOGS_FOLDER, exist_ok=True)
 # Image augmentation parameters
 IMAGE_AUGMENTATION = CONFIG["image_augmentation"]
 
-HEIGHT = IMAGE_AUGMENTATION["height"]
-WIDTH = IMAGE_AUGMENTATION["width"]
-DEPTH = IMAGE_AUGMENTATION["depth"]
-SHIFT = IMAGE_AUGMENTATION["shift"]
-ROTATION = IMAGE_AUGMENTATION["rotation"]
-VAL_AUG_FACTOR = IMAGE_AUGMENTATION["validation_data_augmentation_factor"]
+HEIGHT = int(IMAGE_AUGMENTATION["height"])
+WIDTH = int(IMAGE_AUGMENTATION["width"])
+DEPTH = int(IMAGE_AUGMENTATION["depth"])
+SHIFT = float(IMAGE_AUGMENTATION["shift"])
+ROTATION = float(IMAGE_AUGMENTATION["rotation"])
+VAL_AUG_FACTOR = float(
+    IMAGE_AUGMENTATION["validation_data_augmentation_factor"])
 
 # Hyperparameters
 HYPERPARAMETERS = CONFIG["hyperparameters"]
 
 # Set epochs from args if set else from config file
-EPOCHS = ARGS["epochs"] if ARGS["epochs"] else HYPERPARAMETERS["epochs"]
+EPOCHS = ARGS["epochs"] if ARGS["epochs"] else int(HYPERPARAMETERS["epochs"])
 
-BATCH_SIZE = HYPERPARAMETERS["batch_size"]
-LEARNING_RATE = HYPERPARAMETERS["learning_rate"]
-DROP_EVERY = HYPERPARAMETERS["learning_rate_decay_after_x_epoch"]
-DROP_FACTOR = HYPERPARAMETERS["decay_rate"]
-MOMENTUM = HYPERPARAMETERS["momentum"]
+BATCH_SIZE = int(HYPERPARAMETERS["batch_size"])
+LEARNING_RATE = float(HYPERPARAMETERS["learning_rate"])
+DROP_EVERY = float(HYPERPARAMETERS["learning_rate_decay_after_x_epoch"])
+DROP_FACTOR = float(HYPERPARAMETERS["decay_rate"])
+MOMENTUM = float(HYPERPARAMETERS["momentum"])
 
 # Image generator information
 TRAIN_TEST_VAL_SPLIT = CONFIG["train_test_val_split"]
 
-TEST_SPLIT = TRAIN_TEST_VAL_SPLIT["test_split"]
-VALIDATION_SPLIT = TRAIN_TEST_VAL_SPLIT["validation_split"]
+TEST_SPLIT = float(TRAIN_TEST_VAL_SPLIT["test_split"])
+VALIDATION_SPLIT = float(TRAIN_TEST_VAL_SPLIT["validation_split"])
 
 
 ###################################################################################################
@@ -159,6 +159,14 @@ TRAIN_VALIDATION, TEST = train_test_split(DATASET, test_size=TEST_SPLIT)
 TRAIN, VALIDATION = train_test_split(
     TRAIN_VALIDATION, test_size=VALIDATION_SPLIT)
 
+
+NUM_OF_TRAINING_SAMPLES = 10  # len(TRAIN)
+NUM_OF_VALIDATION_SAMPLES = 10  # len(VALIDATION)
+NUM_OF_TEST_SAMPLES = 10  # len(TEST)
+
+NUM_OF_TRAINING_SAMPLES = len(TRAIN)
+NUM_OF_VALIDATION_SAMPLES = len(VALIDATION)
+NUM_OF_TEST_SAMPLES = len(TEST)
 CLASSES = len(DATASET["Drscore"].unique())
 
 
@@ -230,9 +238,9 @@ TEST_DATA = TEST_DATA_GENERATOR.flow_from_dataframe(dataframe=TEST,
 print("[INFO] Compiling model....")
 Models = Models(height=HEIGHT, width=WIDTH, depth=DEPTH, classes=CLASSES)
 
-if PRETRAINED_MODEL != "":
+if PRETRAINED_MODEL_PATH != "None":
     print("[INFO] Loading pre-trained model")
-    MODEL = load_model(PRETRAINED_MODEL)
+    MODEL = load_model(PRETRAINED_MODEL_PATH)
 else:
     MODEL = Models.resnet50()
 
@@ -305,7 +313,7 @@ HISTORY = MODEL.fit_generator(generator=TRAINING_DATA,
                               epochs=EPOCHS,
                               callbacks=CALLBACKS,
                               validation_data=VALIDATION_DATA,
-                              validation_steps=NUM_OF_TEST_SAMPLES//BATCH_SIZE,
+                              validation_steps=NUM_OF_VALIDATION_SAMPLES//BATCH_SIZE,
                               verbose=VERBOSITY)
 
 
@@ -325,7 +333,7 @@ MODEL.save_weights(os.path.join(OUTPUT_FOLDER, "trained_weights.hdf5"))
 print("[INFO] Evaluating the model....")
 # Predict only on existing images - len(TEST_DATA.classes)
 PREDICTIONS = MODEL.predict_generator(generator=TEST_DATA,
-                                      steps=len(TEST_DATA.classes)//BATCH_SIZE+1)
+                                      steps=NUM_OF_TEST_SAMPLES//BATCH_SIZE)
 Y_PREDICTIONS = np.argmax(PREDICTIONS, axis=1)
 
 CONFUSION_MATRIX_FILENAME = os.path.join(OUTPUT_FOLDER, "confusion_matrix")
@@ -333,12 +341,10 @@ CONFUSION_MATRIX_FILENAME = os.path.join(OUTPUT_FOLDER, "confusion_matrix")
 confusion_matrix_analysis(y_true=TEST_DATA.classes,
                           y_predicted=Y_PREDICTIONS,
                           filename=CONFUSION_MATRIX_FILENAME,
-                          labels=np.arange(CLASSES),
-                          y_map=LB.classes_)
+                          labels=np.arange(CLASSES))
 
 CLASSIFICATION_REPORT = classification_report(TEST_DATA.classes,
-                                              Y_PREDICTIONS,
-                                              target_names=LB.classes_)
+                                              Y_PREDICTIONS)
 print(CLASSIFICATION_REPORT)
 
 
@@ -351,7 +357,8 @@ REPORT = [
     80*"#",
     "\n",
     "REPORT".center(80),
-    f'MetaMorph NN training : {TRAINING_MODE.capitalize()} mode'.center(80),
+    f'Training with {NAME} config'.center(80),
+    f'Config file : {CONFIG_FILE}'.center(80),
     f'Model name: {MODEL.name}'.center(80),
     f'Time: {CURRENT_TIMESTAMP}'.center(80),
     f'Training results stored in {OUTPUT_FOLDERNAME}'.center(80),

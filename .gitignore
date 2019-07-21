@@ -21,6 +21,7 @@
 *.tif
 *.jpeg
 *.zip
+**/*/events.out*
 
 # IDE
 .vscode
