@@ -28,7 +28,6 @@ from callbacks.trainingmonitor import TrainingMonitor
 from nn.models import Models
 from prettytable import PrettyTable
 from utils.plot_confusion_matrix import confusion_matrix_analysis
-from utils.validate_config import validate
 
 matplotlib.use("Agg")
 
