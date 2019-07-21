@@ -1,6 +1,16 @@
 """
 Train Metamorph neural network
 """
+from utils.plot_confusion_matrix import confusion_matrix_analysis
+from nn.models import Models
+from callbacks.trainingmonitor import TrainingMonitor
+from sklearn.preprocessing import LabelBinarizer
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import classification_report, confusion_matrix
+from prettytable import PrettyTable
+from PIL import Image, ImageFile
+from keras.preprocessing.image import ImageDataGenerator
+from keras.optimizers import SGD
 import argparse
 import configparser
 import datetime
@@ -19,17 +29,10 @@ from imutils import paths
 from keras.callbacks import (EarlyStopping, LearningRateScheduler,
                              ModelCheckpoint, TensorBoard)
 from keras.models import load_model
-from keras.optimizers import SGD
-from keras.preprocessing.image import ImageDataGenerator
-from PIL import Image, ImageFile
-from prettytable import PrettyTable
-from sklearn.metrics import classification_report, confusion_matrix
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import LabelBinarizer
+from keras.applications.vgg19 import preprocess_input as vgg_preprocess_input
+from keras.applications.resnet50 import preprocess_input as resnet_preprocess_input
+from keras.applications.inception_v3 import preprocess_input as inception_preprocess_input
 
-from callbacks.trainingmonitor import TrainingMonitor
-from nn.models import Models
-from utils.plot_confusion_matrix import confusion_matrix_analysis
 
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 
@@ -63,6 +66,8 @@ VERBOSITY = int(CONFIG["general"]["verbosity"])
 
 # Set model configuration
 MODEL_NAME = CONFIG["model"]["name"]
+TRANSFER_LEARNING = CONFIG["model"].getboolean(
+    "transfer_learning", fallback=True)
 PRETRAINED_MODEL_PATH = CONFIG["model"]["pretrained_model_path"]
 LOSS = CONFIG["model"]["loss"]
 METRICS = CONFIG["model"]["metrics"].split(",")
@@ -96,8 +101,23 @@ os.makedirs(LOGS_FOLDER, exist_ok=True)
 # Image augmentation parameters
 IMAGE_AUGMENTATION = CONFIG["image_augmentation"]
 
+RESNET_HEIGHT, RESNET_WIDTH = 224, 224
+INCEPTION_HEIGHT, INCEPTION_WIDTH = 299, 299
+VGG_HEIGHT, VGG_WIDTH = 256, 256
+
 HEIGHT = int(IMAGE_AUGMENTATION["height"])
 WIDTH = int(IMAGE_AUGMENTATION["width"])
+
+if TRANSFER_LEARNING:
+    if MODEL_NAME == "resnet":
+        HEIGHT, WIDTH = RESNET_HEIGHT, RESNET_WIDTH
+    elif MODEL_NAME == "inception":
+        HEIGHT, WIDTH = INCEPTION_HEIGHT, INCEPTION_WIDTH
+    elif MODEL_NAME == "vgg":
+        HEIGHT, WIDTH = VGG_HEIGHT, VGG_WIDTH
+    else:
+        HEIGHT, WIDTH = VGG_HEIGHT, VGG_WIDTH
+
 DEPTH = int(IMAGE_AUGMENTATION["depth"])
 SHIFT = float(IMAGE_AUGMENTATION["shift"])
 ROTATION = float(IMAGE_AUGMENTATION["rotation"])
@@ -136,6 +156,7 @@ print(80*"#")
 PRETTY = PrettyTable()
 PRETTY.field_names = ["Purpose", "Parameter", "Values"]
 PRETTY.align = "l"
+PRETTY.add_row(["Model", "Name", MODEL_NAME])
 PRETTY.add_row(["", "", ""])
 PRETTY.add_row(["Image Augmentation", "Shift", SHIFT])
 PRETTY.add_row(["Image Augmentation", "Rotation", ROTATION])
@@ -164,18 +185,27 @@ TRAIN, VALIDATION = train_test_split(
     TRAIN_VALIDATION, test_size=VALIDATION_SPLIT)
 
 
-NUM_OF_TRAINING_SAMPLES = 64  # len(TRAIN)
-NUM_OF_VALIDATION_SAMPLES = 64  # len(VALIDATION)
-CLASSES = len(DATASET["Drscore"].unique())
-
-
 ###################################################################################################
 #  Create data generator to augment images for training and validation
 ###################################################################################################
 
+preprocessing_function = None
+
+if TRANSFER_LEARNING:
+    if MODEL_NAME == "resnet":
+        preprocessing_function = resnet_preprocess_input
+    elif MODEL_NAME == "inception":
+        preprocessing_function = inception_preprocess_input
+    elif MODEL_NAME == "vgg":
+        preprocessing_function = vgg_preprocess_input
+    else:
+        preprocessing_function = vgg_preprocess_input
+
+
 TRAINING_DATA_GENERATOR = ImageDataGenerator(rotation_range=ROTATION,
-                                             width_shift_range=SHIFT, height_shift_range=SHIFT,
-                                             rescale=1./255)
+                                             width_shift_range=SHIFT,
+                                             height_shift_range=SHIFT,
+                                             preprocessing_function=preprocessing_function)
 
 
 VALIDATION_DATA_GENERATOR = ImageDataGenerator(rotation_range=ROTATION *
@@ -184,9 +214,10 @@ VALIDATION_DATA_GENERATOR = ImageDataGenerator(rotation_range=ROTATION *
                                                (1+VAL_AUG_FACTOR),
                                                height_shift_range=SHIFT *
                                                (1+VAL_AUG_FACTOR),
-                                               rescale=1./255)
+                                               preprocessing_function=preprocessing_function)
 
-TEST_DATA_GENERATOR = ImageDataGenerator(rescale=1./255)
+TEST_DATA_GENERATOR = ImageDataGenerator(
+    preprocessing_function=preprocessing_function)
 
 # Load sample images to fit image generator for identifying featurewise center
 # SAMPLES = [process_sample(image_path, depth=DEPTH)
@@ -229,7 +260,16 @@ TEST_DATA = TEST_DATA_GENERATOR.flow_from_dataframe(dataframe=TEST,
                                                     batch_size=BATCH_SIZE,
                                                     shuffle=False)
 
+
+NUM_OF_TRAINING_SAMPLES = 64  # len(TRAIN)
+NUM_OF_VALIDATION_SAMPLES = 64  # len(VALIDATION)
+NUM_OF_TEST_SAMPLES = len(TEST_DATA.classes)//BATCH_SIZE+1
+CLASSES = len(DATASET["Drscore"].unique())
+
+
+###################################################################################################
 # Cohen Kappa metrics
+###################################################################################################
 
 
 def cohen_kappa(y_true, y_pred):
@@ -299,20 +339,20 @@ DECAY = LearningRateScheduler(step_decay)
 
 # Checkpoint model callback
 WEIGHT_NAME = os.path.join(WEIGHTS_FOLDER, "weights.hdf5")
-CHECKPOINT = ModelCheckpoint(WEIGHT_NAME, monitor="val_loss", mode="min",
+CHECKPOINT = ModelCheckpoint(WEIGHT_NAME, monitor="val_cohen_kappa", mode="max",
                              save_best_only=True, verbose=1)
 
-EARLY_STOP = EarlyStopping(monitor='val_loss',
+EARLY_STOP = EarlyStopping(monitor='val_cohen_kappa',
                            min_delta=0.001,
                            patience=5,
-                           mode='min',
+                           mode='max',
                            verbose=1)
 
 TENSORBOARD = TensorBoard(log_dir=LOGS_FOLDER,
                           histogram_freq=0,
                           # write_batch_performance=True,
                           write_graph=True,
-                          write_images=False)
+                          write_images=True)
 
 CALLBACKS = [EARLY_STOP, TRAINING_MONITOR, DECAY, CHECKPOINT, TENSORBOARD]
 
@@ -326,8 +366,6 @@ HISTORY = MODEL.fit_generator(generator=TRAINING_DATA,
                               steps_per_epoch=NUM_OF_TRAINING_SAMPLES//BATCH_SIZE,
                               epochs=EPOCHS,
                               callbacks=CALLBACKS,
-                              workers=8,
-                              use_multiprocessing=True,
                               validation_data=VALIDATION_DATA,
                               validation_steps=NUM_OF_VALIDATION_SAMPLES//BATCH_SIZE,
                               verbose=VERBOSITY)
@@ -349,8 +387,7 @@ MODEL.save_weights(os.path.join(OUTPUT_FOLDER, "trained_weights.hdf5"))
 print("[INFO] Evaluating the model....")
 # Predict only on existing images - len(TEST_DATA.classes)
 PREDICTIONS = MODEL.predict_generator(generator=TEST_DATA,
-                                      workers=8,
-                                      use_multiprocessing=True,
+                                      steps=NUM_OF_TEST_SAMPLES,
                                       verbose=VERBOSITY)
 Y_PREDICTIONS = np.argmax(PREDICTIONS, axis=1)
 
@@ -376,6 +413,7 @@ REPORT = [
     "\n",
     "REPORT".center(80),
     f'Training with {NAME} config'.center(80),
+    f'Model used {MODEL_NAME}'.center(80),
     f'Config file : {CONFIG_FILE}'.center(80),
     f'Model name: {MODEL.name}'.center(80),
     f'Time: {CURRENT_TIMESTAMP}'.center(80),
