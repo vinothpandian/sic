@@ -15,21 +15,23 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import tensorflow as tf
-
 from imutils import paths
 from keras.callbacks import (EarlyStopping, LearningRateScheduler,
                              ModelCheckpoint, TensorBoard)
 from keras.models import load_model
 from keras.optimizers import SGD
 from keras.preprocessing.image import ImageDataGenerator
+from PIL import Image, ImageFile
+from prettytable import PrettyTable
 from sklearn.metrics import classification_report, confusion_matrix
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelBinarizer
 
 from callbacks.trainingmonitor import TrainingMonitor
 from nn.models import Models
-from prettytable import PrettyTable
 from utils.plot_confusion_matrix import confusion_matrix_analysis
+
+ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 matplotlib.use("Agg")
 
@@ -161,10 +163,6 @@ TRAIN_VALIDATION, TEST = train_test_split(DATASET, test_size=TEST_SPLIT)
 TRAIN, VALIDATION = train_test_split(
     TRAIN_VALIDATION, test_size=VALIDATION_SPLIT)
 
-
-NUM_OF_TRAINING_SAMPLES = 10  # len(TRAIN)
-NUM_OF_VALIDATION_SAMPLES = 10  # len(VALIDATION)
-NUM_OF_TEST_SAMPLES = 10  # len(TEST)
 
 NUM_OF_TRAINING_SAMPLES = len(TRAIN)
 NUM_OF_VALIDATION_SAMPLES = len(VALIDATION)

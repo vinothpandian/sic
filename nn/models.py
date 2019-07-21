@@ -16,14 +16,14 @@ class Models:
 
     def resnet50(self):
         model = ResNet50(include_top=True,
-                         weights="imagenet",
+                         weights=None,
                          input_shape=(self.height, self.width, self.depth),
                          classes=self.classes)
         return model
 
     def inception(self):
         model = InceptionV3(include_top=True,
-                            weights="imagenet",
+                            weights=None,
                             input_shape=(self.height, self.width, self.depth),
                             classes=self.classes)
 
