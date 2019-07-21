@@ -60,6 +60,7 @@ NAME = CONFIG["general"]["name"]
 VERBOSITY = int(CONFIG["general"]["verbosity"])
 
 # Set model configuration
+MODEL_NAME = CONFIG["model"]["name"]
 PRETRAINED_MODEL_PATH = CONFIG["model"]["pretrained_model_path"]
 LOSS = CONFIG["model"]["loss"]
 METRICS = CONFIG["model"]["metrics"].split(",")
@@ -250,8 +251,12 @@ if PRETRAINED_MODEL_PATH != "None":
     print("[INFO] Loading pre-trained model")
     MODEL = load_model(PRETRAINED_MODEL_PATH)
 else:
-    MODEL = Models.resnet50()
-
+    if MODEL_NAME == "resnet":
+        MODEL = Models.resnet50()
+    elif MODEL_NAME == "inception":
+        MODEL = Models.inception()
+    else:
+        MODEL = Models.resnet50()
 
 OPTIMISER = SGD(lr=LEARNING_RATE, momentum=MOMENTUM)
 

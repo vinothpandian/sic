@@ -3,6 +3,7 @@ import default models from keras
 """
 
 from keras.applications.resnet50 import ResNet50
+from keras.applications.inception_v3 import InceptionV3
 
 
 class Models:
@@ -15,7 +16,15 @@ class Models:
 
     def resnet50(self):
         model = ResNet50(include_top=True,
-                         weights=None,
+                         weights="imagenet",
                          input_shape=(self.height, self.width, self.depth),
                          classes=self.classes)
+        return model
+
+    def inception(self):
+        model = InceptionV3(include_top=True,
+                            weights="imagenet",
+                            input_shape=(self.height, self.width, self.depth),
+                            classes=self.classes)
+
         return model
