@@ -164,8 +164,8 @@ TRAIN, VALIDATION = train_test_split(
     TRAIN_VALIDATION, test_size=VALIDATION_SPLIT)
 
 
-NUM_OF_TRAINING_SAMPLES = len(TRAIN)
-NUM_OF_VALIDATION_SAMPLES = len(VALIDATION)
+NUM_OF_TRAINING_SAMPLES = 64  # len(TRAIN)
+NUM_OF_VALIDATION_SAMPLES = 64  # len(VALIDATION)
 NUM_OF_TEST_SAMPLES = len(TEST)
 CLASSES = len(DATASET["Drscore"].unique())
 
@@ -346,7 +346,7 @@ MODEL.save_weights(os.path.join(OUTPUT_FOLDER, "trained_weights.hdf5"))
 print("[INFO] Evaluating the model....")
 # Predict only on existing images - len(TEST_DATA.classes)
 PREDICTIONS = MODEL.predict_generator(generator=TEST_DATA,
-                                      steps=NUM_OF_TEST_SAMPLES//BATCH_SIZE)
+                                      steps=NUM_OF_TEST_SAMPLES)
 Y_PREDICTIONS = np.argmax(PREDICTIONS, axis=1)
 
 CONFUSION_MATRIX_FILENAME = os.path.join(OUTPUT_FOLDER, "confusion_matrix")

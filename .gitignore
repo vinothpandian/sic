@@ -21,7 +21,7 @@
 *.tif
 *.jpeg
 *.zip
-**/*/events.out*
+
 
 # IDE
 .vscode
@@ -156,4 +156,5 @@ dmypy.json
 .pyre/
 
 # End of https://www.gitignore.io/api/data,python
+
 output/
