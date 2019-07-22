@@ -29,8 +29,12 @@ from keras.callbacks import (EarlyStopping, LearningRateScheduler,
                              ModelCheckpoint, TensorBoard)
 from keras.models import load_model
 from keras.applications.vgg19 import preprocess_input as vgg_preprocess_input
+from keras.applications.vgg16 import preprocess_input as vgg16_preprocess_input
 from keras.applications.resnet50 import preprocess_input as resnet_preprocess_input
 from keras.applications.inception_v3 import preprocess_input as inception_preprocess_input
+from keras.applications.densenet import preprocess_input as densenet_preprocess_input
+from keras.applications.nasnet import preprocess_input as nasnet_preprocess_input
+from keras.applications.mobilenet_v2 import preprocess_input as mobilenet_preprocess_input
 
 
 ImageFile.LOAD_TRUNCATED_IMAGES = True
@@ -103,6 +107,9 @@ IMAGE_AUGMENTATION = CONFIG["image_augmentation"]
 RESNET_HEIGHT, RESNET_WIDTH = 224, 224
 INCEPTION_HEIGHT, INCEPTION_WIDTH = 299, 299
 VGG_HEIGHT, VGG_WIDTH = 256, 256
+MOBILENET_HEIGHT, MOBILENET_WIDTH = 224, 224
+DENSENET_HEIGHT, DENSENET_WIDTH = 224, 224
+NASNET_HEIGHT, NASNET_WIDTH = 331, 331
 
 HEIGHT = int(IMAGE_AUGMENTATION["height"])
 WIDTH = int(IMAGE_AUGMENTATION["width"])
@@ -114,6 +121,14 @@ if TRANSFER_LEARNING:
         HEIGHT, WIDTH = INCEPTION_HEIGHT, INCEPTION_WIDTH
     elif MODEL_NAME == "vgg":
         HEIGHT, WIDTH = VGG_HEIGHT, VGG_WIDTH
+    elif MODEL_NAME == "vgg16":
+        HEIGHT, WIDTH = VGG_HEIGHT, VGG_WIDTH
+    elif MODEL_NAME == "mobilenet":
+        HEIGHT, WIDTH = MOBILENET_HEIGHT, MOBILENET_WIDTH
+    elif MODEL_NAME == "NASNet":
+        HEIGHT, WIDTH = NASNET_HEIGHT, NASNET_WIDTH
+    elif MODEL_NAME == "densenet":
+        HEIGHT, WIDTH = DENSENET_HEIGHT, DENSENET_WIDTH
     else:
         HEIGHT, WIDTH = VGG_HEIGHT, VGG_WIDTH
 
@@ -141,12 +156,21 @@ TRAIN_TEST_VAL_SPLIT = CONFIG["train_test_val_split"]
 TEST_SPLIT = float(TRAIN_TEST_VAL_SPLIT["test_split"])
 VALIDATION_SPLIT = float(TRAIN_TEST_VAL_SPLIT["validation_split"])
 
+DEBUG_MODE = "DEBUG" in CONFIG
+
+if DEBUG_MODE:
+    DEBUG = CONFIG["DEBUG"]
+    TRAIN_LENGTH = int(DEBUG["train_length"])
+    VALIDATION_LENGTH = int(DEBUG["validation_length"])
+
 
 ###################################################################################################
 # print details of the model for log
 ###################################################################################################
 
 print(80*"#")
+if DEBUG_MODE:
+    print(f'DEBUG MODE'.center(80))
 print(f'Training - with {NAME} config file'.center(80))
 print(CURRENT_TIMESTAMP.center(80))
 print(f'Training results stored in {OUTPUT_FOLDERNAME}'.center(80))
@@ -195,6 +219,14 @@ if TRANSFER_LEARNING:
         preprocessing_function = resnet_preprocess_input
     elif MODEL_NAME == "inception":
         preprocessing_function = inception_preprocess_input
+    elif MODEL_NAME == "vgg16":
+        preprocessing_function = vgg16_preprocess_input
+    elif MODEL_NAME == "mobilenet":
+        preprocessing_function = mobilenet_preprocess_input
+    elif MODEL_NAME == "NASNet":
+        preprocessing_function = nasnet_preprocess_input
+    elif MODEL_NAME == "densenet":
+        preprocessing_function = densenet_preprocess_input
     elif MODEL_NAME == "vgg":
         preprocessing_function = vgg_preprocess_input
     else:
@@ -260,8 +292,8 @@ TEST_DATA = TEST_DATA_GENERATOR.flow_from_dataframe(dataframe=TEST,
                                                     shuffle=False)
 
 
-NUM_OF_TRAINING_SAMPLES = len(TRAIN)
-NUM_OF_VALIDATION_SAMPLES = len(VALIDATION)
+NUM_OF_TRAINING_SAMPLES = TRAIN_LENGTH if DEBUG_MODE else len(TRAIN)
+NUM_OF_VALIDATION_SAMPLES = VALIDATION_LENGTH if DEBUG_MODE else len(VALIDATION)
 NUM_OF_TEST_SAMPLES = len(TEST_DATA.classes)//BATCH_SIZE+1
 CLASSES = len(DATASET["Drscore"].unique())
 
@@ -291,6 +323,14 @@ else:
         MODEL = Models.resnet50()
     elif MODEL_NAME == "inception":
         MODEL = Models.inception()
+    elif MODEL_NAME == "vgg16":
+        MODEL = Models.vgg16()
+    elif MODEL_NAME == "mobilenet":
+        MODEL = Models.mobilenet()
+    elif MODEL_NAME == "NASNet":
+        MODEL = Models.NASNet()
+    elif MODEL_NAME == "densenet":
+        MODEL = Models.densenet()
     elif MODEL_NAME == "vgg":
         MODEL = Models.vgg()
     else:
