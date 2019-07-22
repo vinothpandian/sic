@@ -3,7 +3,6 @@ Train Metamorph neural network
 """
 from utils.plot_confusion_matrix import confusion_matrix_analysis
 from nn.models import Models
-from callbacks.trainingmonitor import TrainingMonitor
 from sklearn.preprocessing import LabelBinarizer
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report, confusion_matrix
@@ -318,7 +317,6 @@ MODEL.summary()
 # Training monitor
 FIGURE_PATH = os.path.sep.join([LOGS_FOLDER, "{}.png".format(PID)])
 JSON_PATH = os.path.sep.join([LOGS_FOLDER, "{}.json".format(PID)])
-TRAINING_MONITOR = TrainingMonitor(FIGURE_PATH, jsonPath=JSON_PATH)
 
 
 def step_decay(epoch):
@@ -354,7 +352,7 @@ TENSORBOARD = TensorBoard(log_dir=LOGS_FOLDER,
                           write_graph=True,
                           write_images=True)
 
-CALLBACKS = [EARLY_STOP, TRAINING_MONITOR, DECAY, CHECKPOINT, TENSORBOARD]
+CALLBACKS = [EARLY_STOP, DECAY, CHECKPOINT, TENSORBOARD]
 
 
 ###################################################################################################
