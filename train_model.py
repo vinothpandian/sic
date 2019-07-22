@@ -260,8 +260,8 @@ TEST_DATA = TEST_DATA_GENERATOR.flow_from_dataframe(dataframe=TEST,
                                                     shuffle=False)
 
 
-NUM_OF_TRAINING_SAMPLES = 64  # len(TRAIN)
-NUM_OF_VALIDATION_SAMPLES = 64  # len(VALIDATION)
+NUM_OF_TRAINING_SAMPLES = len(TRAIN)
+NUM_OF_VALIDATION_SAMPLES = len(VALIDATION)
 NUM_OF_TEST_SAMPLES = len(TEST_DATA.classes)//BATCH_SIZE+1
 CLASSES = len(DATASET["Drscore"].unique())
 
